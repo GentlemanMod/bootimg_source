@@ -86,15 +86,60 @@ int unpack_ramdisk(int argc, char **argv)
         return -1;
     }
 
+    //Qualcomm
     fread(&tmp, 4, 1, f);
     for(count = 0;count < 4;count++) {
         if (tmp[count] != GZIP_MAGIC[count]) {
             if_file = 1;
         }
     }
-
     if(!if_file) {
-        sprintf(tmp_path,"cp %s ramdisk-new.gz",ramdisk);system(tmp_path); // linux
+        sprintf(tmp_path,"cp %s ramdisk-new.gz",ramdisk);system(tmp_path);
+        goto UNRAMDISK;
+    }
+    else
+        if_file = 0;
+
+    //MTK
+    fseek(f,512,SEEK_SET);
+    fread(&tmp, 4, 1, f);
+    for(count = 0;count < 4;count++) {
+        if (tmp[count] != GZIP_MAGIC[count]) {
+            if_file = 1;
+        }
+    }
+    if(!if_file) { 
+        FILE *o_ramdisk;
+        int tmp_sum;
+        if ((o_ramdisk = fopen("ramdisk-new.gz", "wb")) == NULL)
+        {
+            fprintf(stderr, "Cannot open output file.\n");
+            return 1;
+        }
+
+        fseek(f, 0L, SEEK_END);
+        int f_size = ftell(f);
+
+        fseek(f,512,SEEK_SET);
+
+        for(tmp_sum=0;tmp_sum <= f_size;tmp_sum+=PATH_MAX)
+        {
+            fread(&tmp_path, PATH_MAX, 1, f);
+            fwrite(&tmp_path, PATH_MAX, 1, o_ramdisk);
+        }
+        fread(&tmp_path, PATH_MAX-(tmp_sum-f_size), 1, f);
+        fwrite(&tmp_path, PATH_MAX-(tmp_sum-f_size), 1, o_ramdisk);
+
+
+        fclose(o_ramdisk);
+
+        goto UNRAMDISK;
+    }
+    else
+        if_file = 0;
+
+UNRAMDISK:
+    if(!if_file) {
         argv[0] = "minigzip";
         argv[1] = "-d";
         argv[2] = "ramdisk-new.gz";
@@ -103,12 +148,13 @@ int unpack_ramdisk(int argc, char **argv)
     } else {
         fseek(f,0,SEEK_SET);
         fread(&header, sizeof(header), 1, f);
-        for(count = 0;count < 6;count++) {
+        for(count = 0;count < 6;count++)
             if (header.magic[count] != RAMDISK_MAGIC[count]) {
                 printf("The %s not gzip or cpio!\n",ramdisk);
+                system("rm -r ramdisk-new.gz");
                 exit(0);
             }
-        }
+
         cpio = ramdisk;
     }
 
